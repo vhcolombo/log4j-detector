@@ -1,8 +1,21 @@
 
+## To Build Or Download Previous Versions
+
+Please see the tags page: https://github.com/mergebase/log4j-detector/tags
+
+## v2021.12.22
+
+- Ability to detect log4j-core-2.3.1.jar and log4j-core-2.12.3.jar (both are \_SAFE\_).
+- Improved ability to deal with shaded jars.
+
+## v2021.12.20
+
+- Added support for --stdin, --json, and --exclude options.
+- Added support for scanning *.jpi and *.hpi files (essentially zip files).
+
 ## v2021.12.17
 
 - Ability to detect log4j-core-2.17.0.jar 
-
 
 ## v2021.12.16
 
