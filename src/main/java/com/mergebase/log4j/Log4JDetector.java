@@ -13,16 +13,24 @@
  */
 package com.mergebase.log4j;
 
+import static com.mergebase.log4j.VersionComparator.compare;
+
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -34,8 +42,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-
-import static com.mergebase.log4j.VersionComparator.compare;
 
 public class Log4JDetector {
 
@@ -76,6 +82,7 @@ public class Log4JDetector {
     private static Set<String> excludes = new TreeSet<String>();
     private static boolean foundHits = false;
     private static boolean foundLog4j1 = false;
+    private static boolean neutralize = false;
 
     public static void main(String[] args) throws IOException {
         List<String> argsList = new ArrayList<String>();
@@ -93,6 +100,9 @@ public class Log4JDetector {
                 it.remove();
             } else if ("--json".equals(argOrig)) {
                 json = true;
+                it.remove();
+            } else if ("--neutralize".equals(argOrig)) {
+                neutralize = true;
                 it.remove();
             } else if (argOrig.startsWith("--exclude=[")) {
                 int x = argOrig.indexOf("]");
@@ -152,7 +162,7 @@ public class Log4JDetector {
         }
         for (String arg : argsList) {
             File dir = new File(arg);
-            analyze(dir);
+            analyze(dir, neutralize);
         }
         if (json) {
             System.out.println("{\"_THE_END_\":true}]}");
@@ -235,8 +245,8 @@ public class Log4JDetector {
     }
 
     private static void findLog4jRecursive(
-            final String zipPath, final Zipper zipper
-    ) {
+            final String zipPath, final Zipper zipper, final Boolean neutralize
+    ) throws IOException {
         ZipInputStream zin;
         try {
             try {
@@ -359,7 +369,7 @@ public class Log4JDetector {
                             }
                         };
 
-                        findLog4jRecursive(fullPath, recursiveZipper);
+                        findLog4jRecursive(fullPath, recursiveZipper, neutralize);
                     } catch (Exception e) {
                         System.err.println(fullPath + " FAILED: " + e);
                         e.printStackTrace(System.err);
@@ -500,6 +510,30 @@ public class Log4JDetector {
                     if (!isSafe) {
                         foundHits = true;
                     }
+
+                    if (neutralize) {
+                        zipper.close();
+
+                        /// Define ZIP File System Properies in HashMap //
+                        Map<String, String> zip_properties = new HashMap<String, String>();
+                        // We want to read an existing ZIP File, so we set this to False //
+                        zip_properties.put("create", "false");
+
+                        //Specify the path to the ZIP File that you want to read as a File System //
+                        URI zip_disk = URI.create("jar:file:/" + zipPath.replaceAll("\\\\", "/"));
+
+                        // Create ZIP file System //
+                        try (FileSystem zipfs = FileSystems.newFileSystem(
+                            zip_disk, zip_properties)) {
+                            // Get the Path inside ZIP File to delete the ZIP Entry //
+                            Path pathInZipfile = zipfs.getPath("org/apache/logging/log4j/core/lookup/JndiLookup.class");
+                            System.out.println("About to delete an entry from ZIP File" + pathInZipfile.toUri());
+                            // Execute Delete //
+                            Files.delete(pathInZipfile);
+                            System.out.println("File successfully deleted");
+                        }
+                    }
+                    
                     System.out.println(prepareOutput(zipPath, buf));
                 } else if (isLog4J1_X) {
                     buf.append(" contains Log4J-1.x   <= 1.2.17 _OLD_");
@@ -538,7 +572,7 @@ public class Log4JDetector {
     }
 
     private static void scan(
-            final File zipFile
+            final File zipFile, final Boolean neutralize
     ) {
         Zipper myZipper = new Zipper() {
             private FileInputStream fin;
@@ -587,7 +621,7 @@ public class Log4JDetector {
 
         try {
             String zip = zipFile.getPath();
-            findLog4jRecursive(zip, myZipper);
+            findLog4jRecursive(zip, myZipper,neutralize);
         } catch (Exception e) {
             System.err.println("-- Problem: " + zipFile.getPath() + " FAILED: " + e);
             e.printStackTrace(System.err);
@@ -639,7 +673,7 @@ public class Log4JDetector {
 
     private static final HashSet<Long> visited = new HashSet<Long>();
 
-    private static void analyze(File f) {
+    private static void analyze(File f, Boolean neutralize) {
         try {
             f = f.getCanonicalFile();
         } catch (Exception e) {
@@ -683,7 +717,7 @@ public class Log4JDetector {
             if (fileList != null) {
                 Arrays.sort(fileList, FILES_ORDER_BY_NAME);
                 for (File ff : fileList) {
-                    analyze(ff);
+                    analyze(ff,neutralize);
                 }
             }
         } else {
@@ -694,7 +728,7 @@ public class Log4JDetector {
                         System.err.println("-- Problem: no permission to read contents of zip file - " + f.getPath());
                         return;
                     }
-                    scan(f);
+                    scan(f, neutralize);
                 } else if (1 == fileType) {
                     String currentPathLower = f.getPath().toLowerCase(Locale.ROOT);
                     boolean isLog4J_1_X = currentPathLower.endsWith(FILE_OLD_LOG4J);
@@ -787,6 +821,7 @@ public class Log4JDetector {
                         } else {
                             buf.append("<= 2.0-beta8 _POTENTIALLY_SAFE_ (Did you remove JndiLookup.class?)");
                         }
+
                         System.out.println(prepareOutput(f.getParentFile().getParent(), buf));
                     }
                 } else if (verbose) {
