@@ -537,30 +537,33 @@ public class Log4JDetector {
                     if (!isSafe) {
                         foundHits = true;
                     }
-
                     if (neutralize) {
-                        zipper.close();
-
-                        /// Define ZIP File System Properies in HashMap //
-                        Map<String, String> zip_properties = new HashMap<String, String>();
-                        // We want to read an existing ZIP File, so we set this to False //
-                        zip_properties.put("create", "false");
-
-                        //Specify the path to the ZIP File that you want to read as a File System //
-                        URI zip_disk = URI.create("jar:file:/" + zipPath.replaceAll("\\\\", "/"));
-
-                        // Create ZIP file System //
-                        try (FileSystem zipfs = FileSystems.newFileSystem(
-                            zip_disk, zip_properties)) {
-                            // Get the Path inside ZIP File to delete the ZIP Entry //
-                            Path pathInZipfile = zipfs.getPath("org/apache/logging/log4j/core/lookup/JndiLookup.class");
-                            System.out.println("About to delete an entry from ZIP File" + pathInZipfile.toUri());
-                            // Execute Delete //
-                            Files.delete(pathInZipfile);
-                            System.out.println("File successfully deleted");
+                        try {
+                            zipper.close();
+    
+                            /// Define ZIP File System Properies in HashMap //
+                            Map<String, String> zip_properties = new HashMap<String, String>();
+                            // We want to read an existing ZIP File, so we set this to False //
+                            zip_properties.put("create", "false");
+    
+                            //Specify the path to the ZIP File that you want to read as a File System //
+                            URI zip_disk = URI.create("jar:file:/" + zipPath.replaceAll("\\\\", "/"));
+    
+                            // Create ZIP file System //
+                            try (FileSystem zipfs = FileSystems.newFileSystem(
+                                zip_disk, zip_properties)) {
+                                // Get the Path inside ZIP File to delete the ZIP Entry //
+                                Path pathInZipfile = zipfs.getPath("org/apache/logging/log4j/core/lookup/JndiLookup.class");
+                                System.out.println("About to delete an entry from ZIP File" + pathInZipfile.toUri());
+                                // Execute Delete //
+                                Files.delete(pathInZipfile);
+                                System.out.println("File successfully deleted");
+                            }
+                        } catch (Exception e) {
+                            System.out.println("Unable to delet the JndiLookup.class. Error: " + e.getMessage());
                         }
                     }
-                    
+                
                     System.out.println(prepareOutput(zipPath, buf));
                 } else if (isLog4J1_X) {
                     buf.append(" contains Log4J-1.x   <= 1.2.17 _OLD_");
